@@ -44,7 +44,7 @@
     <script src="https://unpkg.com/earcut@3.0.2/dist/earcut.min.js"></script>
 
     <!-- MeshWriter (local build) -->
-    <script src="../dist/meshwriter.min.js"></script>
+    <script src="../dist/meshwriter.js"></script>
 
     <script>
         const canvas = document.getElementById("renderCanvas");
@@ -54,11 +54,11 @@
             const scene = new BABYLON.Scene(engine);
             scene.clearColor = new BABYLON.Color3(0.2, 0.2, 0.3);
 
-            // Camera - positioned to view text from the front
+            // Camera - positioned to view text straight on
             const camera = new BABYLON.ArcRotateCamera(
                 "camera",
-                -Math.PI / 2,  // alpha: rotate to front of text
-                Math.PI / 3,
+                -Math.PI / 2,  // alpha
+                Math.PI / 2,   // beta: horizontal view
                 150,
                 new BABYLON.Vector3(0, 0, 0),
                 scene
@@ -97,6 +97,31 @@
                     "z": 0
                 }
             });
+
+            // Rotate text to face the camera (convert from XZ plane to XY plane)
+            const mesh = text.getMesh();
+            if (mesh) {
+                mesh.rotation.x = -Math.PI / 2;
+            }
+
+            // Debug: log SPS particle positions and mesh info
+            const sps = text.getSPS();
+            if (sps && sps.particles) {
+                console.log("Particle positions:");
+                sps.particles.forEach((p, i) => {
+                    console.log(`  Particle ${i}: x=${p.position.x.toFixed(2)}, y=${p.position.y.toFixed(2)}, z=${p.position.z.toFixed(2)}`);
+                });
+            }
+
+            // Check the actual mesh bounding info
+            const spsMesh = text.getMesh();
+            if (spsMesh) {
+                spsMesh.refreshBoundingInfo();
+                const bounds = spsMesh.getBoundingInfo().boundingBox;
+                console.log("SPS Mesh bounds (before rotation):");
+                console.log(`  min: (${bounds.minimumWorld.x.toFixed(2)}, ${bounds.minimumWorld.y.toFixed(2)}, ${bounds.minimumWorld.z.toFixed(2)})`);
+                console.log(`  max: (${bounds.maximumWorld.x.toFixed(2)}, ${bounds.maximumWorld.y.toFixed(2)}, ${bounds.maximumWorld.z.toFixed(2)})`);
+            }
 
             return scene;
         };

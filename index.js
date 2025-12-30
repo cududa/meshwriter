@@ -588,7 +588,8 @@ define(
             csgShape             = csgShape.subtract(B.CSG2.FromMesh(holes[k]));
           }
           // CSG2.toMesh signature: (name, scene, options)
-          resultMesh             = csgShape.toMesh(meshName, scene, {});
+          // centerMesh: false prevents CSG2 from centering the result, preserving original Y extent
+          resultMesh             = csgShape.toMesh(meshName, scene, { centerMesh: false });
           // CSG2/Manifold produces opposite face winding compared to legacy CSG
           // Flip faces to match expected orientation
           resultMesh.flipFaces();

@@ -109,7 +109,8 @@
 
     var   scene,FONTS,defaultColor,defaultOpac,naturalLetterHeight,curveSampleSize,Γ=Math.floor,hpb,hnm,csn,jur,wgd,debug;
     var   b128back,b128digits;
-    var   earcut                 = __webpack_require__(7);
+    var   earcutModule            = __webpack_require__(7);
+    var   earcut                 = earcutModule.default || earcutModule;
     var   B                      = {},
           methodsList            = ["Vector2","Vector3","Path2","Curve3","Color3","SolidParticleSystem","PolygonMeshBuilder","StandardMaterial","Mesh"],
           csgMethodsList         = ["CSG", "CSG2", "InitializeCSG2Async"];
@@ -166,6 +167,56 @@
       return csgVersion === 'CSG';
     }
 
+    function markCSGInitialized(){
+      csgReady                 = true;
+    }
+
+    function wrapInitializeCSG2(source){
+      if(!isObject(source)){
+        return;
+      }
+      var initFn               = source.InitializeCSG2Async;
+      if(typeof initFn !== "function"){
+        return;
+      }
+      // Already wrapped somewhere else - reuse wrapper
+      if(initFn.__meshWriterWrapper){
+        source.InitializeCSG2Async = initFn.__meshWriterWrapper;
+        B.InitializeCSG2Async     = initFn.__meshWriterWrapper;
+        return;
+      }
+      if(initFn.__meshWriterWrapped){
+        B.InitializeCSG2Async     = initFn;
+        return;
+      }
+      var wrappedInit          = function(){
+        var result             = initFn.apply(this, arguments);
+        if(isPromiseLike(result)){
+          return result.then(function(value){
+            markCSGInitialized();
+            return value;
+          });
+        }
+        markCSGInitialized();
+        return result;
+      };
+      wrappedInit.__meshWriterWrapped = true;
+      wrappedInit.__meshWriterOriginal = initFn;
+      initFn.__meshWriterWrapper = wrappedInit;
+      source.InitializeCSG2Async = wrappedInit;
+      B.InitializeCSG2Async     = wrappedInit;
+    }
+
+    function checkExternalCSGReady(source){
+      if(isObject(source) && typeof source.IsCSG2Ready === "function"){
+        if(source.IsCSG2Ready()){
+          markCSGInitialized();
+          return true;
+        }
+      }
+      return false;
+    }
+
     // *-*=*  *=*-* *-*=*  *=*-* *-*=*  *=*-* *-*=*  *=*-* *-*=*  *=*-* *-*=*  *=*-*
     //  SUPERCONSTRUCTOR  SUPERCONSTRUCTOR  SUPERCONSTRUCTOR 
     // Parameters:
@@ -174,13 +225,14 @@
 
     var Wrapper                  = function(){
 
-      var proto,defaultFont,scale,meshOrigin,preferences;
+    var proto,defaultFont,scale,meshOrigin,flattenZ,preferences;
 
       scene                      = arguments[0];
       preferences                = makePreferences(arguments);
 
       defaultFont                = isObject(FONTS[preferences.defaultFont]) ? preferences.defaultFont : "HelveticaNeue-Medium";
       meshOrigin                 = preferences.meshOrigin==="fontOrigin" ? preferences.meshOrigin : "letterCenter";
+      flattenZ                   = preferences.flattenZ !== false;
       scale                      = isNumber(preferences.scale) ? preferences.scale : 1;
       debug                      = isBoolean(preferences.debug) ? preferences.debug : false;
 
@@ -332,7 +384,7 @@
       if(csgVersion === 'CSG2' && !csgReady){
         if(typeof B.InitializeCSG2Async === 'function'){
           await B.InitializeCSG2Async();
-          csgReady               = true;
+          markCSGInitialized();
         }
       }
 
@@ -342,6 +394,11 @@
 
     // Check if CSG is ready (useful for sync usage with manual CSG2 init)
     Wrapper.isReady = function(){
+      if(!csgReady && csgVersion === 'CSG2'){
+        if(typeof BABYLON === "object"){
+          checkExternalCSGReady(BABYLON);
+        }
+      }
       return isCSGReady();
     };
 
@@ -597,6 +654,11 @@
           if(isArray(holes)&&holes.length){
             letterMeshes.push ( punchHolesInShape(shape,holes,letter,i) )
           }else{
+            if(csgVersion === 'CSG2'){
+              // Flip faces to match CSG2-processed letters
+              // PolygonMeshBuilder in newer Babylon.js produces opposite face winding
+              shape.flipFaces();
+            }
             letterMeshes.push ( shape )
           }
         }
@@ -607,13 +669,17 @@
         var resultMesh, csgShape, k;
 
         if(csgVersion === 'CSG2'){
-          // CSG2 API (Babylon 7.31+)
+          // CSG2 API (Babylon 7.31+) - built on Manifold
           csgShape               = B.CSG2.FromMesh(shape);
           for ( k=0; k<holes.length ; k++ ) {
             csgShape             = csgShape.subtract(B.CSG2.FromMesh(holes[k]));
           }
           // CSG2.toMesh signature: (name, scene, options)
-          resultMesh             = csgShape.toMesh(meshName, scene, {});
+          // centerMesh: false prevents CSG2 from centering the result, preserving original Y extent
+          resultMesh             = csgShape.toMesh(meshName, scene, { centerMesh: false });
+          // CSG2/Manifold produces opposite face winding compared to legacy CSG
+          // Flip faces to match expected orientation
+          resultMesh.flipFaces();
         }else{
           // Legacy CSG API (Babylon < 7.31)
           csgShape               = B.CSG.FromMesh(shape);
@@ -786,6 +852,18 @@
         });
         // Detect which CSG version is available
         csgVersion               = detectCSGVersion();
+        if(csgVersion === 'CSG2'){
+          wrapInitializeCSG2(src);
+          var ready              = checkExternalCSGReady(src);
+          if(!ready && typeof BABYLON === "object" && BABYLON !== src){
+            ready                = checkExternalCSGReady(BABYLON);
+          }
+          csgReady               = !!ready;
+        }else if(csgVersion === 'CSG'){
+          csgReady               = true;
+        }else{
+          csgReady               = false;
+        }
         if(!incomplete){supplementCurveFunctions()}
       }
       if(isString(incomplete)){
@@ -862,6 +940,7 @@
     function isBoolean(mn)        { return typeof mn === "boolean" } ;
     function isAmplitude(ma)      { return typeof ma === "number" && !isNaN(ma) ? 0 <= ma && ma <= 1 : false } ;
     function isObject(mo)         { return mo != null && typeof mo === "object" || typeof mo === "function" } ;
+    function isPromiseLike(mo)    { return isObject(mo) && typeof mo.then === "function" } ;
     function isArray(ma)          { return ma != null && typeof ma === "object" && ma.constructor === Array } ; 
     function isString(ms)         { return typeof ms === "string" ? ms.length>0 : false }  ;
     function isSupportedFont(ff)  { return isObject(FONTS[ff]) } ;
@@ -871,6 +950,7 @@
     function round(n)             { return Γ(0.3+n*1000000)/1000000 }
   }).apply(exports, __WEBPACK_AMD_DEFINE_ARRAY__),
 				__WEBPACK_AMD_DEFINE_RESULT__ !== undefined && (module.exports = __WEBPACK_AMD_DEFINE_RESULT__));
+
 /* WEBPACK VAR INJECTION */}.call(this, __webpack_require__(1)))
 
 /***/ }),
