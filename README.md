@@ -68,7 +68,10 @@ After MeshWriter is loaded (see below), BABYLON.MeshWriter is defined.  It is ca
 	    default-font           Helvetica
 	    scale                      1
 	    letter-origin         "letter-center"
+	    flat-z                    true           # letters share a common Z plane
 	    methods           (See section at bottom)
+
+Set `flat-z` (or `flatZ`) to `false` if you prefer the legacy behavior where each glyph keeps its original Z-center offset.
 
 The call to BABYLON.MeshWriter returns a constructor.  Call it "**Writer**".
 
