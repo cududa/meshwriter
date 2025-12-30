@@ -29,6 +29,8 @@ const Writer = BABYLON.MeshWriter(scene, {scale: 1});
 const text = new Writer("Hello", {"letter-height": 50});
 ```
 
+MeshWriter automatically tracks the completion of `BABYLON.InitializeCSG2Async()`, so the synchronous constructor works as soon as CSG2 is initialized elsewhere in your app.
+
 ### Helper Methods
 
 - `MeshWriter.isReady()` - Check if CSG is initialized

@@ -80,6 +80,56 @@ define(
       return csgVersion === 'CSG';
     }
 
+    function markCSGInitialized(){
+      csgReady                 = true;
+    }
+
+    function wrapInitializeCSG2(source){
+      if(!isObject(source)){
+        return;
+      }
+      var initFn               = source.InitializeCSG2Async;
+      if(typeof initFn !== "function"){
+        return;
+      }
+      // Already wrapped somewhere else - reuse wrapper
+      if(initFn.__meshWriterWrapper){
+        source.InitializeCSG2Async = initFn.__meshWriterWrapper;
+        B.InitializeCSG2Async     = initFn.__meshWriterWrapper;
+        return;
+      }
+      if(initFn.__meshWriterWrapped){
+        B.InitializeCSG2Async     = initFn;
+        return;
+      }
+      var wrappedInit          = function(){
+        var result             = initFn.apply(this, arguments);
+        if(isPromiseLike(result)){
+          return result.then(function(value){
+            markCSGInitialized();
+            return value;
+          });
+        }
+        markCSGInitialized();
+        return result;
+      };
+      wrappedInit.__meshWriterWrapped = true;
+      wrappedInit.__meshWriterOriginal = initFn;
+      initFn.__meshWriterWrapper = wrappedInit;
+      source.InitializeCSG2Async = wrappedInit;
+      B.InitializeCSG2Async     = wrappedInit;
+    }
+
+    function checkExternalCSGReady(source){
+      if(isObject(source) && typeof source.IsCSG2Ready === "function"){
+        if(source.IsCSG2Ready()){
+          markCSGInitialized();
+          return true;
+        }
+      }
+      return false;
+    }
+
     // *-*=*  *=*-* *-*=*  *=*-* *-*=*  *=*-* *-*=*  *=*-* *-*=*  *=*-* *-*=*  *=*-*
     //  SUPERCONSTRUCTOR  SUPERCONSTRUCTOR  SUPERCONSTRUCTOR 
     // Parameters:
@@ -88,13 +138,14 @@ define(
 
     var Wrapper                  = function(){
 
-      var proto,defaultFont,scale,meshOrigin,preferences;
+    var proto,defaultFont,scale,meshOrigin,flattenZ,preferences;
 
       scene                      = arguments[0];
       preferences                = makePreferences(arguments);
 
       defaultFont                = isObject(FONTS[preferences.defaultFont]) ? preferences.defaultFont : "HelveticaNeue-Medium";
       meshOrigin                 = preferences.meshOrigin==="fontOrigin" ? preferences.meshOrigin : "letterCenter";
+      flattenZ                   = preferences.flattenZ !== false;
       scale                      = isNumber(preferences.scale) ? preferences.scale : 1;
       debug                      = isBoolean(preferences.debug) ? preferences.debug : false;
 
@@ -246,7 +297,7 @@ define(
       if(csgVersion === 'CSG2' && !csgReady){
         if(typeof B.InitializeCSG2Async === 'function'){
           await B.InitializeCSG2Async();
-          csgReady               = true;
+          markCSGInitialized();
         }
       }
 
@@ -256,6 +307,11 @@ define(
 
     // Check if CSG is ready (useful for sync usage with manual CSG2 init)
     Wrapper.isReady = function(){
+      if(!csgReady && csgVersion === 'CSG2'){
+        if(typeof BABYLON === "object"){
+          checkExternalCSGReady(BABYLON);
+        }
+      }
       return isCSGReady();
     };
 
@@ -511,9 +567,11 @@ define(
           if(isArray(holes)&&holes.length){
             letterMeshes.push ( punchHolesInShape(shape,holes,letter,i) )
           }else{
-            // Flip faces to match CSG2-processed letters
-            // PolygonMeshBuilder in newer Babylon.js produces opposite face winding
-            shape.flipFaces();
+            if(csgVersion === 'CSG2'){
+              // Flip faces to match CSG2-processed letters
+              // PolygonMeshBuilder in newer Babylon.js produces opposite face winding
+              shape.flipFaces();
+            }
             letterMeshes.push ( shape )
           }
         }
@@ -706,6 +764,18 @@ define(
         });
         // Detect which CSG version is available
         csgVersion               = detectCSGVersion();
+        if(csgVersion === 'CSG2'){
+          wrapInitializeCSG2(src);
+          var ready              = checkExternalCSGReady(src);
+          if(!ready && typeof BABYLON === "object" && BABYLON !== src){
+            ready                = checkExternalCSGReady(BABYLON);
+          }
+          csgReady               = !!ready;
+        }else if(csgVersion === 'CSG'){
+          csgReady               = true;
+        }else{
+          csgReady               = false;
+        }
         if(!incomplete){supplementCurveFunctions()}
       }
       if(isString(incomplete)){
@@ -782,6 +852,7 @@ define(
     function isBoolean(mn)        { return typeof mn === "boolean" } ;
     function isAmplitude(ma)      { return typeof ma === "number" && !isNaN(ma) ? 0 <= ma && ma <= 1 : false } ;
     function isObject(mo)         { return mo != null && typeof mo === "object" || typeof mo === "function" } ;
+    function isPromiseLike(mo)    { return isObject(mo) && typeof mo.then === "function" } ;
     function isArray(ma)          { return ma != null && typeof ma === "object" && ma.constructor === Array } ; 
     function isString(ms)         { return typeof ms === "string" ? ms.length>0 : false }  ;
     function isSupportedFont(ff)  { return isObject(FONTS[ff]) } ;
