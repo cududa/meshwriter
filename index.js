@@ -194,7 +194,7 @@ define(
         // Next, create the meshes
         // This creates an array of meshes, one for each letter
         // It also creates two other arrays, which are used for letter positioning
-        meshesAndBoxes           = constructLetterPolygons(letters, fontSpec, 0, 0, 0, letterScale, thickness, material, meshOrigin, flattenZ);
+        meshesAndBoxes           = constructLetterPolygons(letters, fontSpec, 0, 0, 0, letterScale, thickness, material, meshOrigin);
         meshes                   = meshesAndBoxes[0];
         lettersBoxes             = meshesAndBoxes[1];
         lettersOrigins           = meshesAndBoxes[2];
@@ -354,7 +354,7 @@ define(
     //   ~ the meshes (not offset by position)
     //   ~ the boxes (to help with positions features) 
     //   ~ the letter origins (providing offset for each letter)
-    function constructLetterPolygons(letters, fontSpec, xOffset, yOffset, zOffset, letterScale, thickness, material, meshOrigin, flattenZFlag){
+    function constructLetterPolygons(letters, fontSpec, xOffset, yOffset, zOffset, letterScale, thickness, material, meshOrigin){
       var letterOffsetX          = 0,
           lettersOrigins         = new Array(letters.length),
           lettersBoxes           = new Array(letters.length),
@@ -440,7 +440,7 @@ define(
             thisX, lastX, thisZ, lastZ, minX=NaN, maxX=NaN, minZ=NaN, maxZ=NaN, minXadj=NaN, maxXadj=NaN, minZadj=NaN, maxZadj=NaN;
 
         letterBox                = [ adjX(spec.xMin), adjX(spec.xMax), adjZ(spec.yMin), adjZ(spec.yMax) ];
-        letterOrigins            = [ round(letterOffsetX), -1*adjX(0), flattenZFlag ? 0 : -1*adjZ(0) ];
+        letterOrigins            = [ round(letterOffsetX), -1*adjX(0), -1*adjZ(0) ];
 
         // ~  ~  ~  ~  ~  ~  ~  ~  ~  ~  ~  ~  ~  ~  ~  ~  ~  ~  ~  ~
         // Scope warning:  letterOffsetX belongs to an outer closure
@@ -738,11 +738,6 @@ define(
         }
         if(isBoolean(p.debug)){
           prefs.debug            = p.debug
-        }
-        if(p["flat-z"] !== undefined){
-          prefs.flattenZ         = p["flat-z"];
-        }else if(p.flattenZ !== undefined){
-          prefs.flattenZ         = p.flattenZ;
         }
         cacheMethods(p.methods);
         return prefs
