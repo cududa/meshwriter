@@ -54,10 +54,10 @@
             const scene = new BABYLON.Scene(engine);
             scene.clearColor = new BABYLON.Color3(0.1, 0.1, 0.15);
 
-            // Camera
+            // Camera - positioned to view text from the front
             const camera = new BABYLON.ArcRotateCamera(
                 "camera",
-                Math.PI / 2,
+                -Math.PI / 2,  // alpha: rotate to front of text
                 Math.PI / 2.5,
                 250,
                 new BABYLON.Vector3(0, 20, 0),
