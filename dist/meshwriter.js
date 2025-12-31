@@ -698,11 +698,6 @@
           if(isArray(holes)&&holes.length){
             letterMeshes.push ( punchHolesInShape(shape,holes,letter,i) )
           }else{
-            if(csgVersion === 'CSG2'){
-              // Flip faces to match CSG2-processed letters
-              // PolygonMeshBuilder in newer Babylon.js produces opposite face winding
-              shape.flipFaces();
-            }
             letterMeshes.push ( shape )
           }
         }
@@ -718,11 +713,6 @@
         var resultMesh           = csgVersion === 'CSG2'
           ? csgShape.toMesh(meshName, scene, { centerMesh: false })
           : csgShape.toMesh(meshName, null, scene);
-        if(csgVersion === 'CSG2'){
-          // CSG2/Manifold produces opposite face winding compared to legacy CSG
-          // Flip faces to match expected orientation
-          resultMesh.flipFaces();
-        }
         holes.forEach(h=>h.dispose());
         shape.dispose();
         return resultMesh;
